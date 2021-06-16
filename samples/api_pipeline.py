@@ -1,19 +1,30 @@
 import asyncio
 import pprint
 from td.client import TDClient
+from configparser import ConfigParser
+
+config = ConfigParser()
+config.read('config.ini')
 
 # Create a new session
 TDSession = TDClient(
-    client_id='<YOUR_CLIENT_ID>',
-    redirect_uri='<YOUR_REDIRECT_URI>',
-    credentials_path='<YOUR_CREDENTIALS_PATH>'
+    client_id=config.get('main', 'CLIENT_ID'),
+    redirect_uri=config.get('main', 'REDIRECT_URI'),
+    credentials_path=config.get('main', 'JSON_PATH')
 )
 
 # Login to the session
 TDSession.login()
 
-# Create a streaming sesion
+# Create a streaming session
 TDStreamingClient = TDSession.create_streaming_session()
+TDStreamingClient.quality_of_service(qos_level="express")
+
+# Set the data dump location
+TDStreamingClient.write_behavior(
+    file_path = "raw_data.csv", 
+    append_mode = True
+)
 
 # Level One Quote
 TDStreamingClient.level_one_quotes(
@@ -21,14 +32,20 @@ TDStreamingClient.level_one_quotes(
     fields=list(range(0, 50))
 )
 
-# Level One Option
-TDStreamingClient.level_one_futures(
-    symbols=['/ES'],
-    fields=list(range(0, 42))
-)
+# # Level One Forex
+# TDStreamingClient.level_one_forex(
+#     symbols=['EUR/USD'], 
+#     fields=list(range(0,26))
+# )
+
+# # Level One Option
+# TDStreamingClient.level_one_futures(
+#     symbols=['/ES'],
+#     fields=list(range(0, 42))
+# )
+
 
 # Data Pipeline function
-
 
 async def data_pipeline():
     """
@@ -69,7 +86,6 @@ async def data_pipeline():
         if 'data' in data:
 
             print('='*80)
-
             data_content = data['data'][0]['content']
             pprint.pprint(data_content, indent=4)
 
@@ -93,7 +109,7 @@ async def data_pipeline():
             print(unsub)
             print('-'*80)
 
-        # Once we have 5 heartbeats, let's close the stream. Make sure to break the while loop.
+        # Once we have 3 heartbeats, let's close the stream. Make sure to break the while loop.
         # or else you will encounter an exception.
         if heartbeat_response_count == 3:
             await TDStreamingClient.close_stream()

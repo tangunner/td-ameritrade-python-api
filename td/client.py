@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import json
 import pprint
@@ -38,7 +39,6 @@ from td.exceptions import ServerError
 from td.exceptions import GeneralError
 
 class TDClient():
-
     """TD Ameritrade API Client Class.
 
     Implements OAuth 2.0 Authorization Code Grant workflow, handles configuration
@@ -75,7 +75,7 @@ class TDClient():
             TDClient object. (default: {None})
 
         auth_flow {str} -- Specifies is authentication is done through the command line (`default`) or 
-            through the flask app `flask`. (default: {'default'})
+            through the flask app (`flask`). (default: {'default'})
 
         ### Usage:
         ----
@@ -115,12 +115,12 @@ class TDClient():
         self._cached_state = None
         self._multiprocessing_safe = _multiprocessing_safe
         self._multiprocessing_lock = None
-        if self._multiprocessing_safe:
-            import multiprocessing as mp
-            self._cached_state = mp.Manager().dict()
-            self._multiprocessing_lock = mp.Lock()
-            self._cached_state.update({
-                'access_token': None,
+        if self._multiprocessing_safe:                        # Manager() turns cached state into a type of list 
+            import multiprocessing as mp                        # where info affecting one instance in the list is also 
+            self._cached_state = mp.Manager().dict()            # shared across all other instances in the list
+            self._multiprocessing_lock = mp.Lock()            # Lock restricts the cached state from being accessed
+            self._cached_state.update({                         # until it is released when its no longer in use. This
+                'access_token': None,                           # prevents simultaneous accessing causing errors
                 'refresh_token': None,
                 'logged_in': False
             })
@@ -188,7 +188,6 @@ class TDClient():
             headers['Content-Type'] = 'application/json'
         elif mode == 'form':
             headers['Content-Type'] = 'application/x-www-form-urlencoded'
-
         return headers
 
     def _api_endpoint(self, endpoint: str, resource: str = None) -> str:
@@ -230,14 +229,14 @@ class TDClient():
 
         credentials_file_exists = self.credentials_path.exists()
 
-        # if they allow for caching and the file exists then load it.
+        # if caching allowed and the file exists then load the credentials
         if action == 'init' and credentials_file_exists:
             with open(file=self.credentials_path, mode='r') as json_file:
                 self.state.update(json.load(json_file))
                 if self._multiprocessing_safe:
                     self._cached_state.update(self.state)
 
-        # if they want to save it and have allowed for caching then load the file.
+        # if want to save credentials and caching allowed then save the file.
         elif action == 'save':     
             with open(file=self.credentials_path, mode='w+') as json_file:
                 if self._multiprocessing_safe:
@@ -248,9 +247,9 @@ class TDClient():
     def login(self) -> bool:
         """Logs the user into the TD Ameritrade API.
 
-        Ask the user to authenticate  themselves via the TD Ameritrade Authentication Portal. This will
+        Ask the user to authenticate themselves via the TD Ameritrade Authentication Portal. This will
         create a URL, display it for the User to go to and request that they paste the final URL into
-        command window. Once the user is authenticated the API key is valide for 90 days, so refresh
+        command window. Once the user is authenticated the API key is valid for 90 days, so refresh
         tokens may be used from this point, up to the 90 days.
 
         ### Returns:
@@ -291,9 +290,10 @@ class TDClient():
 
         # build the parameters of our request
         data = {
-            'client_id': self.client_id,
             'grant_type': 'refresh_token',
-            'refresh_token': self.state['refresh_token']
+            'refresh_token': self.state['refresh_token'],
+            'client_id': self.client_id,
+            'redirect_uri': self.redirect_uri
         }
 
         # Make the request.
@@ -304,7 +304,6 @@ class TDClient():
         )
 
         if response.ok:
-
             self._token_save(
                 token_dict=response.json(),
                 includes_refresh=False
@@ -327,10 +326,11 @@ class TDClient():
 
         # build the parameters of our request
         data = {
-            'client_id': self.client_id,
             'grant_type': 'refresh_token',
+            'refresh_token': self.state['refresh_token'],
             'access_type': 'offline',
-            'refresh_token': self.state['refresh_token']
+            'client_id': self.client_id,
+            'redirect_uri': self.redirect_uri
         }
 
         # Make the request.
@@ -428,7 +428,6 @@ class TDClient():
         )
         
         if response.ok:
-
             self._token_save(
                 token_dict=response.json(),
                 includes_refresh=True
@@ -456,12 +455,8 @@ class TDClient():
             access_token_ts = datetime.datetime.fromtimestamp(access_token_exp)
 
             # Grab the Expire Thresholds.
-            refresh_token_exp_threshold = refresh_token_ts - timedelta(days=2)
-            access_token_exp_threshold = access_token_ts - timedelta(minutes=5)
-
-            # Convert to Seconds.
-            refresh_token_exp_threshold = refresh_token_exp_threshold.timestamp()
-            access_token_exp_threshold = access_token_exp_threshold.timestamp()
+            refresh_token_exp_threshold = (refresh_token_ts - timedelta(days=20)).timestamp()
+            access_token_exp_threshold = (access_token_ts - timedelta(minutes=5)).timestamp()
 
             # See if we need a new Refresh Token.
             if datetime.datetime.now().timestamp() > refresh_token_exp_threshold:
@@ -533,7 +528,7 @@ class TDClient():
 
         ### Arguments:
         ----
-        token_dict {dict} -- A response object recieved from the `grab_refresh_token` or
+        token_dict {dict} -- A response object received from the `grab_refresh_token` or
             `grab_access_token` methods.
         
         ### Returns:
@@ -552,7 +547,6 @@ class TDClient():
         self.state['access_token_expires_at_date'] = acc_timestamp
 
         if includes_refresh:
-
             refresh_token_expire = time.time() + int(token_dict['refresh_token_expires_in'])
             ref_timestamp = datetime.datetime.fromtimestamp(refresh_token_expire)
             ref_timestamp = ref_timestamp.isoformat()
@@ -566,7 +560,6 @@ class TDClient():
         if self._multiprocessing_safe:
             self._cached_state.update(self.state)
         self._state_manager('save')
-
         return self.state
 
     def _make_request(self, method: str, endpoint: str, mode: str = None, params: dict = None, data: dict = None, json:dict = None, 
@@ -719,7 +712,7 @@ class TDClient():
         parameters = ENDPOINT_ARGUMENTS[endpoint]
         arguments = parameters[parameter_name]
 
-        if isinstance(parameter_argument,str):
+        if isinstance(parameter_argument, str):
             parameter_argument = [parameter_argument]
 
         # See if any of the arguments aren't in the possible values.

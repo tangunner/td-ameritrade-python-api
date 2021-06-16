@@ -7,9 +7,9 @@ from td.client import TDClient
 with open(file=r"tests\unit\fields.jsonc", mode="r") as fields_file:
     fields_dict=json.load(fp=fields_file)
 
-# Grab configuration values.
+# Grab config values
 config = ConfigParser()
-config.read('config/config.ini')
+config.read('config.ini')
 
 CLIENT_ID = config.get('main', 'CLIENT_ID')
 REDIRECT_URI = config.get('main', 'REDIRECT_URI')
@@ -28,6 +28,7 @@ TDSession.login()
 
 # Create a streaming sesion
 TDStreamingClient = TDSession.create_streaming_session()
+TDStreamingClient.quality_of_service(qos_level="express")
 
 # Set the data dump location
 TDStreamingClient.write_behavior(
@@ -71,8 +72,8 @@ TDStreamingClient.write_behavior(
 # # Level One Futures
 # TDStreamingClient.level_one_futures(symbols=['/CL'], fields=["0", "1", "2", "3", "4"])
 
-# # Level One Forex
-# TDStreamingClient.level_one_forex(symbols=['EUR/USD'], fields=list(range(0,26)))
+# Level One Forex
+TDStreamingClient.level_one_forex(symbols=['EUR/USD'], fields=list(range(0,26)))
 
 # # Level One Futures Options
 # TDStreamingClient.level_one_futures_options(symbols=['./E1AG20C3220'], fields=list(range(0,36)))
