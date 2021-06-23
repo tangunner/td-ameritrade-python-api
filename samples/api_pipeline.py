@@ -1,10 +1,22 @@
+import os
+import sys
+
+currentdir = f"{str(os.getcwd())}\\td-ameritrade-python-api\\samples"
+parentdir = os.path.dirname(currentdir)
+if currentdir not in sys.path:
+    sys.path.append(currentdir)
+if parentdir not in sys.path:
+    sys.path.append(parentdir)
+if f"{parentdir}\\td" not in sys.path:
+    sys.path.append(f"{parentdir}\\td")
+
 import asyncio
 import pprint
 from td.client import TDClient
 from configparser import ConfigParser
 
 config = ConfigParser()
-config.read('config.ini')
+config.read('config/config.ini')
 
 # Create a new session
 TDSession = TDClient(
@@ -26,9 +38,11 @@ TDStreamingClient.write_behavior(
     append_mode = True
 )
 
+"""Below are the individual data requests getting streamed from the websocket"""
+
 # Level One Quote
 TDStreamingClient.level_one_quotes(
-    symbols=["SPY", "IVV", "SDS", "SH"],
+    symbols=["SPY"],
     fields=list(range(0, 50))
 )
 
@@ -76,6 +90,11 @@ async def data_pipeline():
     # Build the Pipeline.
     await TDStreamingClient.build_pipeline()
 
+    """
+    Wrap any functionality/processing you want applied to all of the stream
+    data inside of the below while loop
+    """
+    
     # Keep going as long as we can recieve data.
     while True:
 
@@ -103,11 +122,16 @@ async def data_pipeline():
 
         # Once we have 1 data responses, we can unsubscribe from a service.
         if data_response_count == 1:
-            unsub = await TDStreamingClient.unsubscribe(service='LEVELONE_FUTURES')
+            unsub = await TDStreamingClient.unsubscribe(service='QUOTES')
             data_response_count += 1
             print('='*80)
             print(unsub)
             print('-'*80)
+
+        # Stream automatically ends after 100 data responses are received
+        elif data_response_count == 100:
+            await TDStreamingClient.close_stream()
+            break
 
         # Once we have 3 heartbeats, let's close the stream. Make sure to break the while loop.
         # or else you will encounter an exception.
